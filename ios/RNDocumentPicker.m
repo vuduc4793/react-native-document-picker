@@ -123,13 +123,16 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
     // TODO double check this implemenation, see eg. https://developer.apple.com/documentation/foundation/nsfilecoordinator/1412420-prepareforreadingitemsaturls
     [coordinator coordinateReadingItemAtURL:url options:NSFileCoordinatorReadingResolvesSymbolicLink error:&fileError byAccessor:^(NSURL *newURL) {
         // If the coordinated operation fails, then the accessor block never runs
-        result[FIELD_URI] = ((mode == UIDocumentPickerModeOpen) ? url : newURL).absoluteString;
+        // decoder utf-8
+        NSString *correctUrl = [((mode == UIDocumentPickerModeOpen) ? url : newURL).absoluteString stringByRemovingPercentEncoding];
+        result[FIELD_URI] = correctUrl;
         
         NSError *copyError;
         NSString *maybeFileCopyPath = copyDestination ? [RNDocumentPicker copyToUniqueDestinationFrom:newURL usingDestinationPreset:copyDestination error:copyError].absoluteString : nil;
         
         if (!copyError) {
-            result[FIELD_FILE_COPY_URI] = RCTNullIfNil(maybeFileCopyPath);
+            NSString *correctCopyUrl = [maybeFileCopyPath stringByRemovingPercentEncoding];
+            result[FIELD_FILE_COPY_URI] = RCTNullIfNil(correctCopyUrl);
         } else {
             result[FIELD_COPY_ERR] = copyError.localizedDescription;
             result[FIELD_FILE_COPY_URI] = [NSNull null];
