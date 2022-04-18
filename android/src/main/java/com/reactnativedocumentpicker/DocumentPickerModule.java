@@ -34,7 +34,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -56,11 +58,13 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
   private static final String OPTION_TYPE = "type";
   private static final String OPTION_MULTIPLE = "allowMultiSelection";
   private static final String OPTION_COPY_TO = "copyTo";
+  private static final String OPTION_MAX_NAME_LENGTH = "maxNameLength";
 
   private static final String FIELD_URI = "uri";
   private static final String FIELD_FILE_COPY_URI = "fileCopyUri";
   private static final String FIELD_COPY_ERROR = "copyError";
   private static final String FIELD_NAME = "name";
+  private static final String FIELD_NAME_ENCODED = "nameEncoded";
   private static final String FIELD_TYPE = "type";
   private static final String FIELD_SIZE = "size";
 
@@ -91,6 +95,7 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
 
   private Promise promise;
   private String copyTo;
+  private int maxNameLength;
 
   public DocumentPickerModule(ReactApplicationContext reactContext) {
     super(reactContext);
@@ -114,7 +119,7 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
     Activity currentActivity = getCurrentActivity();
     this.promise = promise;
     this.copyTo = args.hasKey(OPTION_COPY_TO) ? args.getString(OPTION_COPY_TO) : null;
-
+    this.maxNameLength = args.hasKey(OPTION_MAX_NAME_LENGTH) ? args.getInt(OPTION_MAX_NAME_LENGTH) : 0;
     if (currentActivity == null) {
       sendError(E_ACTIVITY_DOES_NOT_EXIST, "Current activity does not exist");
       return;
@@ -214,7 +219,7 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
           return;
         }
 
-        new ProcessDataTask(getReactApplicationContext(), uris, copyTo, promise).execute();
+        new ProcessDataTask(getReactApplicationContext(), uris, copyTo, maxNameLength, promise).execute();
       } catch (Exception e) {
         sendError(E_UNEXPECTED_EXCEPTION, e.getLocalizedMessage(), e);
       }
@@ -227,13 +232,15 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
     private final WeakReference<Context> weakContext;
     private final List<Uri> uris;
     private final String copyTo;
+    private final int maxNameLength;
     private final Promise promise;
 
-    protected ProcessDataTask(ReactContext reactContext, List<Uri> uris, String copyTo, Promise promise) {
+    protected ProcessDataTask(ReactContext reactContext, List<Uri> uris, String copyTo, int maxNameLength, Promise promise) {
       super(reactContext.getExceptionHandler());
       this.weakContext = new WeakReference<>(reactContext.getApplicationContext());
       this.uris = uris;
       this.copyTo = copyTo;
+      this.maxNameLength = maxNameLength;
       this.promise = promise;
     }
 
@@ -264,8 +271,20 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
         if (cursor != null && cursor.moveToFirst()) {
           int displayNameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
           if (!cursor.isNull(displayNameIndex)) {
-            String fileName = cursor.getString(displayNameIndex);
-            map.putString(FIELD_NAME, fileName);
+            String finalFileName;
+            String rootFileName = cursor.getString(displayNameIndex);
+            String rootMimeType =  rootFileName.substring(rootFileName.lastIndexOf("."));
+            int rootFileNameLength = rootFileName.length();
+            int rootMimeTypeLength = rootMimeType.length();
+            if (this.maxNameLength > 0 && rootFileNameLength > this.maxNameLength ) {
+              finalFileName = rootFileName.substring(0, this.maxNameLength - rootMimeTypeLength - 1) + rootMimeType;
+            } else {
+              finalFileName = rootFileName;
+            }
+            String fileNameEncoder = URLEncoder.encode(finalFileName, "utf-8");
+
+            map.putString(FIELD_NAME, rootFileName);
+            map.putString(FIELD_NAME_ENCODED, fileNameEncoder);
           }
           int mimeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
           if (!cursor.isNull(mimeIndex)) {
@@ -276,6 +295,8 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
             map.putInt(FIELD_SIZE, cursor.getInt(sizeIndex));
           }
         }
+      } catch (UnsupportedEncodingException e) {
+        e.printStackTrace();
       }
 
       prepareFileUri(context, map, uri);
@@ -295,7 +316,7 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
           if (!didCreateDir) {
             throw new IOException("failed to create directory at " + dir.getAbsolutePath());
           }
-          String fileName = map.getString(FIELD_NAME);
+          String fileName = map.getString(FIELD_NAME_ENCODED);
           if (fileName == null) {
             fileName = String.valueOf(System.currentTimeMillis());
           }
