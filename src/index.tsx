@@ -8,6 +8,7 @@ export type DocumentPickerResponse = {
   name: string
   copyError?: string
   fileCopyUri: string | null
+  nameEncoded: string
   type: string | null
   size: number | null
 }
@@ -35,6 +36,7 @@ export type DocumentPickerOptions<OS extends SupportedPlatforms> = {
     | Array<PlatformTypes[OS][keyof PlatformTypes[OS]] | string>
   mode?: 'import' | 'open'
   copyTo?: 'cachesDirectory' | 'documentDirectory'
+  maxNameLength?: number
   allowMultiSelection?: boolean
   transitionStyle?: TransitionStyle
 } & Pick<ModalPropsIOS, 'presentationStyle'>
