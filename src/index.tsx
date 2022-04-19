@@ -35,7 +35,7 @@ export type DocumentPickerOptions<OS extends SupportedPlatforms> = {
     | PlatformTypes[OS][keyof PlatformTypes[OS]]
     | Array<PlatformTypes[OS][keyof PlatformTypes[OS]] | string>
   mode?: 'import' | 'open'
-  copyTo?: 'cachesDirectory' | 'documentDirectory'
+  copyTo: 'cachesDirectory' | 'documentDirectory'
   maxNameLength?: number
   allowMultiSelection?: boolean
   transitionStyle?: TransitionStyle

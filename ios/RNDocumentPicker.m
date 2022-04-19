@@ -13,11 +13,14 @@ static NSString *const E_INVALID_DATA_RETURNED = @"INVALID_DATA_RETURNED";
 
 static NSString *const OPTION_TYPE = @"type";
 static NSString *const OPTION_MULTIPLE = @"allowMultiSelection";
+static NSString *const OPTION_COPY_TO = @"copyTo";
+static NSString *const OPTION_MAX_NAME_LENGTH = @"maxNameLength";
 
 static NSString *const FIELD_URI = @"uri";
 static NSString *const FIELD_FILE_COPY_URI = @"fileCopyUri";
 static NSString *const FIELD_COPY_ERR = @"copyError";
 static NSString *const FIELD_NAME = @"name";
+static NSString *const FIELD_NAME_ENCODED = @"nameEncoded";
 static NSString *const FIELD_TYPE = @"type";
 static NSString *const FIELD_SIZE = @"size";
 
@@ -28,6 +31,7 @@ static NSString *const FIELD_SIZE = @"size";
 @implementation RNDocumentPicker {
     UIDocumentPickerMode mode;
     NSString *copyDestination;
+    int maxNameLength;
     RNCPromiseWrapper* promiseWrapper;
     NSMutableArray *urlsInOpenMode;
 }
@@ -67,7 +71,8 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
     mode = options[@"mode"] && [options[@"mode"] isEqualToString:@"open"] ? UIDocumentPickerModeOpen : UIDocumentPickerModeImport;
-    copyDestination = options[@"copyTo"];
+    copyDestination = options[OPTION_COPY_TO];
+    maxNameLength = options[OPTION_MAX_NAME_LENGTH] ? [options[OPTION_MAX_NAME_LENGTH] intValue]  : 0;
     UIModalPresentationStyle presentationStyle = [RCTConvert UIModalPresentationStyle:options[@"presentationStyle"]];
     UIModalTransitionStyle transitionStyle = [RCTConvert UIModalTransitionStyle:options[@"transitionStyle"]];
     [promiseWrapper setPromiseWithInProgressCheck:resolve rejecter:reject fromCallSite:@"pick"];
@@ -119,11 +124,25 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
 
     NSFileCoordinator *coordinator = [NSFileCoordinator new];
     NSError *fileError;
-
+    NSString *finalFileName;
+    NSString *pathExtension = url.pathExtension;
+    NSString *rootFileName =  url.lastPathComponent;
+    int pathExtensionLength = (int) [pathExtension length];
+    int rootFileNameLength = (int) [rootFileName length];
+    
+    if (rootFileNameLength > maxNameLength && maxNameLength > 0) {
+        int substringToIndex = maxNameLength - pathExtensionLength - 1;
+        NSString *substringFileName = [NSString stringWithFormat:@"%@.%@", [rootFileName substringToIndex:substringToIndex], pathExtension];
+        finalFileName = substringFileName;
+    }
+    else {
+        finalFileName = rootFileName;
+    }
     // TODO double check this implemenation, see eg. https://developer.apple.com/documentation/foundation/nsfilecoordinator/1412420-prepareforreadingitemsaturls
     [coordinator coordinateReadingItemAtURL:url options:NSFileCoordinatorReadingResolvesSymbolicLink error:&fileError byAccessor:^(NSURL *newURL) {
         // If the coordinated operation fails, then the accessor block never runs
         // decoder utf-8
+        
         NSString *correctUrl = [((mode == UIDocumentPickerModeOpen) ? url : newURL).absoluteString stringByRemovingPercentEncoding];
         result[FIELD_URI] = correctUrl;
         
@@ -133,12 +152,14 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
         if (!copyError) {
             NSString *correctCopyUrl = [maybeFileCopyPath stringByRemovingPercentEncoding];
             result[FIELD_FILE_COPY_URI] = RCTNullIfNil(correctCopyUrl);
+            result[FIELD_NAME_ENCODED] = maybeFileCopyPath.lastPathComponent;
         } else {
             result[FIELD_COPY_ERR] = copyError.localizedDescription;
             result[FIELD_FILE_COPY_URI] = [NSNull null];
+            result[FIELD_NAME_ENCODED] = [NSNull null];
         }
-
-        result[FIELD_NAME] = newURL.lastPathComponent;
+        
+        result[FIELD_NAME] = finalFileName;
 
         NSError *attributesError = nil;
         NSDictionary *fileAttributes = [NSFileManager.defaultManager attributesOfItemAtPath:newURL.path error:&attributesError];
