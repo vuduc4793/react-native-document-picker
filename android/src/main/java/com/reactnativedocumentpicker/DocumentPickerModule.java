@@ -283,7 +283,7 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
             }
             String fileNameEncoder = URLEncoder.encode(finalFileName, "utf-8");
 
-            map.putString(FIELD_NAME, rootFileName);
+            map.putString(FIELD_NAME, finalFileName);
             map.putString(FIELD_NAME_ENCODED, fileNameEncoder);
           }
           int mimeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
