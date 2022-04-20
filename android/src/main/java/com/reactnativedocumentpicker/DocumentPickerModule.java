@@ -264,22 +264,25 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
         return Arguments.createMap();
       }
       ContentResolver contentResolver = context.getContentResolver();
+      String fileType = contentResolver.getType(uri);
       WritableMap map = Arguments.createMap();
       map.putString(FIELD_URI, uri.toString());
-      map.putString(FIELD_TYPE, contentResolver.getType(uri));
+      map.putString(FIELD_TYPE, fileType);
+      String lastPathFileType = "."+fileType.substring(fileType.lastIndexOf("/") + 1);
       try (Cursor cursor = contentResolver.query(uri, null, null, null, null, null)) {
         if (cursor != null && cursor.moveToFirst()) {
           int displayNameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
           if (!cursor.isNull(displayNameIndex)) {
             String finalFileName;
             String rootFileName = cursor.getString(displayNameIndex);
-            String rootMimeType =  rootFileName.substring(rootFileName.lastIndexOf("."));
+            Boolean isHasMimeType = rootFileName.lastIndexOf(".") != -1;
+            String rootMimeType =  isHasMimeType ? rootFileName.substring(rootFileName.lastIndexOf(".")): lastPathFileType;
             int rootFileNameLength = rootFileName.length();
             int rootMimeTypeLength = rootMimeType.length();
             if (this.maxNameLength > 0 && rootFileNameLength > this.maxNameLength ) {
               finalFileName = rootFileName.substring(0, this.maxNameLength - rootMimeTypeLength - 1) + rootMimeType;
             } else {
-              finalFileName = rootFileName;
+              finalFileName = isHasMimeType ? rootFileName : rootFileName + rootMimeType;
             }
             String fileNameEncoder = URLEncoder.encode(finalFileName, "utf-8");
 
