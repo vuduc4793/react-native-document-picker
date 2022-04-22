@@ -144,11 +144,23 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
         // decoder utf-8
         
         NSString *correctUrl = [((mode == UIDocumentPickerModeOpen) ? url : newURL).absoluteString stringByRemovingPercentEncoding];
-        result[FIELD_URI] = correctUrl;
         
         NSError *copyError;
-        NSString *maybeFileCopyPath = copyDestination ? [RNDocumentPicker copyToUniqueDestinationFrom:newURL usingDestinationPreset:copyDestination error:copyError].absoluteString : nil;
+        NSString *maybeFileCopyPath;
         
+        if ([[pathExtension uppercaseString]  isEqual: @"HEIC"]) {
+            NSString *newFileName = [rootFileName stringByReplacingOccurrencesOfString:@".HEIC" withString:@".jpg"];
+            NSData *imageData = [NSData dataWithContentsOfURL:url];
+            NSString *convertedFilePath = [RNDocumentPicker convertHeicToJpeg: imageData copyToDirectory:copyDestination fileHeicName:newFileName];
+            maybeFileCopyPath = convertedFilePath;
+            
+            correctUrl = [convertedFilePath  stringByRemovingPercentEncoding];
+            
+            result[FIELD_NAME] = newFileName;
+        } else {
+            maybeFileCopyPath = copyDestination ? [RNDocumentPicker copyToUniqueDestinationFrom:newURL usingDestinationPreset:copyDestination error:copyError].absoluteString : nil;
+            result[FIELD_NAME] = finalFileName;
+        }
         if (!copyError) {
             NSString *correctCopyUrl = [maybeFileCopyPath stringByRemovingPercentEncoding];
             result[FIELD_FILE_COPY_URI] = RCTNullIfNil(correctCopyUrl);
@@ -159,7 +171,7 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
             result[FIELD_NAME_ENCODED] = [NSNull null];
         }
         
-        result[FIELD_NAME] = finalFileName;
+        result[FIELD_URI] = correctUrl;
 
         NSError *attributesError = nil;
         NSDictionary *fileAttributes = [NSFileManager.defaultManager attributesOfItemAtPath:newURL.path error:&attributesError];
@@ -180,6 +192,9 @@ RCT_EXPORT_METHOD(pick:(NSDictionary *)options
 
             NSString *mimeTypeString = (__bridge_transfer NSString *)mimeType;
             result[FIELD_TYPE] = mimeTypeString;
+            if ([[pathExtension uppercaseString]  isEqual: @"HEIC"]) {
+                result[FIELD_TYPE] = @"image/jpeg";
+            }
         } else {
             result[FIELD_TYPE] = [NSNull null];
         }
@@ -233,6 +248,30 @@ RCT_EXPORT_METHOD(releaseSecureAccess:(NSArray<NSString *> *)uris
     } else {
         return destinationUrl;
     }
+}
+
+//conver HEIC to JPG
+
++ (NSString *)convertHeicToJpeg:(NSData*)data copyToDirectory:(NSString *)copyToDirectory fileHeicName: (NSString*)fileHeicName {
+    // create temp file
+    NSURL *tmpDirFullPath = [self getDirectoryForFileCopy:copyToDirectory];
+    NSString *filePath = [[tmpDirFullPath path] stringByAppendingString:[NSString stringWithFormat:@"/%@/", [[NSUUID UUID] UUIDString]]];
+    // make dir
+    BOOL isDir;
+    BOOL exists = [[NSFileManager defaultManager] fileExistsAtPath:filePath isDirectory:&isDir]; if (!exists) {
+        [[NSFileManager defaultManager] createDirectoryAtPath: filePath
+                                  withIntermediateDirectories:YES attributes:nil error:nil];
+    }
+    
+    NSString *newFilePath = [NSString stringWithFormat:@"%@%@", filePath,fileHeicName];
+
+    // save cropped file
+    BOOL status = [data writeToFile:newFilePath atomically:YES];
+    if (!status) {
+        return nil;
+    }
+
+    return newFilePath;
 }
 
 + (NSURL *)getDirectoryForFileCopy:(NSString *)copyToDirectory
